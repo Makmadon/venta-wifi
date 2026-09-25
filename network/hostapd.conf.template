@@ -1,0 +1,13 @@
+# ==============================================================================
+# Hostapd Configuration Template for Wi-Fi Hotspot (Dual Virtual AP or AP)
+# ==============================================================================
+interface=__AP_INTERFACE__
+driver=nl80211
+ssid=__SSID__
+hw_mode=g
+channel=__CHANNEL__
+auth_algs=1
+wmm_enabled=0
+# Optional: Set country code to prevent regulatory domain restrictions
+country_code=ES
+ieee80211n=1

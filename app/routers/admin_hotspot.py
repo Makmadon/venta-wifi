@@ -16,6 +16,8 @@ from app.schemas import (
 from app.services import session_manager
 from app.qr_service import generate_qr_base64_png
 
+from app.hardware_check import check_wifi_capabilities
+
 router = APIRouter(tags=["Admin Hotspot"])
 templates = Jinja2Templates(directory=settings.TEMPLATES_DIR)
 
@@ -26,17 +28,24 @@ def generate_numeric_pin(length: int = 6) -> str:
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     """
-    Renders the Hotspot Business Management Dashboard.
+    Renders the Hotspot Business Management Dashboard with hardware diagnostics.
     """
     plans = db.query(Plan).all()
+    hardware_info = check_wifi_capabilities()
     return templates.TemplateResponse(
         request=request,
         name="admin_hotspot.html",
         context={
             "settings": settings,
-            "plans": plans
+            "plans": plans,
+            "hardware_info": hardware_info
         }
     )
+
+@router.get("/api/admin/hardware")
+def get_hardware_diagnostic():
+    """Returns hardware and Wi-Fi interface capabilities."""
+    return check_wifi_capabilities()
 
 @router.get("/admin/vouchers/print", response_class=HTMLResponse)
 def print_vouchers_sheet(

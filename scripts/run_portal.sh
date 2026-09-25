@@ -27,6 +27,9 @@ echo "=========================================================="
 # Auto-seed database if empty
 $PYTHON "$PROJECT_ROOT/scripts/seed_data.py"
 
+# Hardware and Wi-Fi capability check
+$PYTHON -c "from app.hardware_check import print_hardware_summary; print_hardware_summary()"
+
 # Start FastAPI server on port 8000
 echo "Launching FastAPI on 0.0.0.0:8000..."
 exec $UVICORN main:app --host 0.0.0.0 --port 8000 --log-level info
