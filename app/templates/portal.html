@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ settings.APP_NAME }}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .countdown-display {
+      font-size: 2.8rem;
+      font-weight: 900;
+      font-family: monospace;
+      color: var(--primary);
+      text-align: center;
+      margin: 1rem 0;
+      letter-spacing: 2px;
+    }
+    .pin-input {
+      font-size: 1.5rem;
+      letter-spacing: 6px;
+      text-align: center;
+      font-weight: 700;
+      padding: 0.85rem;
+      text-transform: uppercase;
+    }
+    .plan-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      transition: transform 0.15s ease;
+    }
+    .plan-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+    .badge-time {
+      background: #e0f2fe;
+      color: #0369a1;
+      font-weight: 700;
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="header no-print">
+    <div class="container header-content">
+      <div class="brand">
+        <div class="brand-icon" style="background: #10b981;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+        </div>
+        <div>
+          <div class="brand-title">Internet Wi-Fi Hotspot</div>
+          <div class="brand-subtitle">Tu IP: <span id="label-client-ip">{{ client_ip }}</span></div>
+        </div>
+      </div>
+      <div>
+        <a href="/admin" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">
+          Admin / Ventas
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="max-width: 520px;">
+    <!-- Notification Toast -->
+    <div id="status-toast" style="display: none; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.25rem; font-weight: 600; text-align: center;"></div>
+
+    <!-- VIEW 1: ACTIVE INTERNET SESSION -->
+    <div id="view-active-session" style="{% if not session %}display: none;{% endif %}">
+      <div style="background: white; border: 2px solid var(--success); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow-md); text-align: center;">
+        <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--success-light); color: var(--success); padding: 0.4rem 1rem; border-radius: 9999px; font-weight: 700; font-size: 0.85rem; margin-bottom: 1rem;">
+          <span class="dot-pulse"></span>
+          ¡CONECTADO A INTERNET!
+        </div>
+
+        <h2 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.25rem;">Tiempo Restante de Conexión</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Puedes navegar libremente en cualquier aplicación.</p>
+
+        <div id="countdown-timer" class="countdown-display">
+          --:--:--
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; margin-bottom: 1.25rem; font-size: 0.85rem; text-align: left;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+            <span style="color: var(--text-muted);">Tiempo total contratado:</span>
+            <strong id="session-total-minutes">{{ session.total_minutes if session else 0 }} Minutos</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Expira a las:</span>
+            <strong id="session-expires-at">{{ session.expires_at.strftime('%H:%M:%S') if session else '' }}</strong>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <a href="https://www.google.com" target="_blank" class="btn btn-success btn-block" style="font-size: 1.05rem;">
+            Ir a Navegar en Internet &rarr;
+          </a>
+
+          <!-- Recharge more time toggle -->
+          <button id="btn-toggle-recharge" class="btn btn-secondary btn-block">
+            + Recargar más tiempo (Ingresar otro PIN)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: LOGIN / PIN ENTRY FORM -->
+    <div id="view-login" style="{% if session %}display: none;{% endif %}">
+      <!-- Expired alert if time just ended -->
+      <div id="alert-time-expired" style="display: none; background: var(--danger-light); color: var(--danger); border: 1px solid #fecaca; border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.25rem; text-align: center; font-weight: 700;">
+        ⚠️ Tu tiempo de conexión ha terminado. Ingresa un nuevo PIN o recarga tiempo para continuar navegando.
+      </div>
+
+      <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; box-shadow: var(--shadow-sm); margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.35rem; font-weight: 800; text-align: center; margin-bottom: 0.25rem;">Acceso a Internet por Tiempo</h2>
+        <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+          Ingresa el código PIN de tu ficha prepagada para activar el acceso a internet en este dispositivo.
+        </p>
+
+        <form id="form-connect">
+          <div class="form-group">
+            <label class="form-label" style="text-align: center;">CÓDIGO PIN DE TU FICHA</label>
+            <input type="text" id="input-pin" class="form-input pin-input" placeholder="000000" maxlength="12" required autofocus autocomplete="off">
+          </div>
+
+          <button type="submit" id="btn-submit-pin" class="btn btn-primary btn-block" style="font-size: 1.05rem; padding: 0.85rem;">
+            Activar Conexión a Internet
+          </button>
+        </form>
+
+        {% if settings.FREE_TRIAL_ENABLED %}
+        <div style="text-align: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border);">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">¿Eres nuevo? </span>
+          <button id="btn-request-trial" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem; border-radius: 9999px;">
+            🎁 Probar {{ settings.FREE_TRIAL_MINUTES }} Minutos Gratis
+          </button>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- AVAILABLE TIME PLANS & PRICING -->
+      <div style="margin-bottom: 2rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; margin-bottom: 0.75rem; color: var(--text-main);">
+          Tarifas y Planes de Internet
+        </h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Adquiere tu ficha en caja o mostrador para obtener tu código PIN:
+        </p>
+
+        <div id="plans-container">
+          {% for p in plans %}
+          <div class="plan-card">
+            <div>
+              <div style="font-weight: 700; font-size: 0.95rem;">{{ p.name }}</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">{{ p.description or 'Navegación continua' }}</div>
+            </div>
+            <div style="text-align: right;">
+              <span class="badge-time">{{ p.duration_minutes }} min</span>
+              <div style="font-weight: 800; font-size: 1.1rem; color: var(--primary); margin-top: 0.2rem;">
+                ${{ "%.2f"|format(p.price) }}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Client-side Session & Countdown Controller
+    let remainingSeconds = {{ remaining_seconds }};
+    let isConnected = {{ 'true' if session else 'false' }};
+    let timerInterval = null;
+
+    const viewActive = document.getElementById("view-active-session");
+    const viewLogin = document.getElementById("view-login");
+    const countdownTimer = document.getElementById("countdown-timer");
+    const alertExpired = document.getElementById("alert-time-expired");
+    const statusToast = document.getElementById("status-toast");
+    const formConnect = document.getElementById("form-connect");
+    const inputPin = document.getElementById("input-pin");
+    const btnSubmitPin = document.getElementById("btn-submit-pin");
+    const btnRequestTrial = document.getElementById("btn-request-trial");
+    const btnToggleRecharge = document.getElementById("btn-toggle-recharge");
+
+    // Check URL query param for auto-PIN fill (e.g. from QR scan)
+    const urlParams = new URLSearchParams(window.location.search);
+    const pinParam = urlParams.get("pin");
+    if (pinParam && inputPin) {
+      inputPin.value = pinParam;
+    }
+
+    function formatTime(totalSec) {
+      if (totalSec <= 0) return "00:00:00";
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function startTimer(seconds) {
+      remainingSeconds = seconds;
+      countdownTimer.innerText = formatTime(remainingSeconds);
+      if (timerInterval) clearInterval(timerInterval);
+
+      timerInterval = setInterval(() => {
+        remainingSeconds--;
+        if (remainingSeconds <= 0) {
+          clearInterval(timerInterval);
+          onSessionExpired();
+        } else {
+          countdownTimer.innerText = formatTime(remainingSeconds);
+        }
+      }, 1000);
+    }
+
+    function onSessionExpired() {
+      isConnected = false;
+      viewActive.style.display = "none";
+      viewLogin.style.display = "block";
+      alertExpired.style.display = "block";
+      showToast("Tu tiempo de internet ha expirado. Ingresa un nuevo PIN.", "danger");
+    }
+
+    function showToast(msg, type) {
+      statusToast.innerText = msg;
+      statusToast.style.display = "block";
+      if (type === "success") {
+        statusToast.style.background = "var(--success-light)";
+        statusToast.style.color = "var(--success)";
+      } else {
+        statusToast.style.background = "var(--danger-light)";
+        statusToast.style.color = "var(--danger)";
+      }
+      setTimeout(() => { statusToast.style.display = "none"; }, 5000);
+    }
+
+    // Connect with PIN
+    formConnect.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pinVal = inputPin.value.trim();
+      if (!pinVal) return;
+
+      btnSubmitPin.disabled = true;
+      btnSubmitPin.innerText = "Validando PIN y conectando...";
+
+      try {
+        const res = await fetch("/api/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin: pinVal })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error al conectar");
+
+        showToast(data.message, "success");
+        inputPin.value = "";
+        alertExpired.style.display = "none";
+        viewLogin.style.display = "none";
+        viewActive.style.display = "block";
+        document.getElementById("session-total-minutes").innerText = data.total_minutes + " Minutos";
+        document.getElementById("session-expires-at").innerText = new Date(data.expires_at).toLocaleTimeString();
+        startTimer(data.remaining_seconds);
+
+      } catch (err) {
+        showToast(err.message, "danger");
+      } finally {
+        btnSubmitPin.disabled = false;
+        btnSubmitPin.innerText = "Activar Conexión a Internet";
+      }
+    });
+
+    // Request Free Trial
+    if (btnRequestTrial) {
+      btnRequestTrial.addEventListener("click", async () => {
+        btnRequestTrial.disabled = true;
+        btnRequestTrial.innerText = "Activando prueba...";
+        try {
+          const res = await fetch("/api/trial", { method: "POST" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Error al activar prueba");
+
+          showToast(data.message, "success");
+          viewLogin.style.display = "none";
+          viewActive.style.display = "block";
+          document.getElementById("session-total-minutes").innerText = data.total_minutes + " Minutos";
+          document.getElementById("session-expires-at").innerText = new Date(data.expires_at).toLocaleTimeString();
+          startTimer(data.remaining_seconds);
+        } catch (err) {
+          showToast(err.message, "danger");
+        } finally {
+          btnRequestTrial.disabled = false;
+          btnRequestTrial.innerText = "🎁 Probar Gratis";
+        }
+      });
+    }
+
+    if (btnToggleRecharge) {
+      btnToggleRecharge.addEventListener("click", () => {
+        viewLogin.style.display = viewLogin.style.display === "none" ? "block" : "none";
+        if (viewLogin.style.display === "block") {
+          window.scrollTo({ top: viewLogin.offsetTop, behavior: "smooth" });
+        }
+      });
+    }
+
+    // Background status polling every 10 seconds to sync with server
+    setInterval(async () => {
+      try {
+        const res = await fetch("/api/status");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.is_active && data.remaining_seconds > 0) {
+            if (!isConnected) {
+              isConnected = true;
+              viewLogin.style.display = "none";
+              viewActive.style.display = "block";
+              alertExpired.style.display = "none";
+            }
+            remainingSeconds = data.remaining_seconds;
+            countdownTimer.innerText = formatTime(remainingSeconds);
+          } else if (isConnected) {
+            onSessionExpired();
+          }
+        }
+      } catch (e) {}
+    }, 10000);
+
+    // Initial check
+    if (isConnected && remainingSeconds > 0) {
+      startTimer(remainingSeconds);
+    }
+  </script>
+</body>
+</html>

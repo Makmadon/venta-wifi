@@ -1,96 +1,74 @@
 #!/usr/bin/env python3
 """
-Seed script to populate initial demo events and tickets.
+Seed script to populate initial Internet Access Plans and demo vouchers (fichas).
 """
 import sys
-import os
 from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import engine, Base, SessionLocal
-from app.models import Event, Ticket, Transaction, TicketStatus, TransactionStatus
-from app.security import generate_ticket_hash
-from datetime import datetime, timezone
+from app.models import Plan, Voucher, VoucherStatus
 
 def seed():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
     try:
-        # Check if events already exist
-        if db.query(Event).count() > 0:
-            print("Database already contains events. Skipping seed.")
+        # Check if plans already exist
+        if db.query(Plan).count() > 0:
+            print("Database already contains plans. Skipping seed.")
             return
 
-        print("Seeding demo events and tickets...")
+        print("Seeding initial internet plans and sample vouchers...")
 
-        # 1. Event: General Admission
-        event1 = Event(
-            title="Festival de Música Local 2026",
-            description="Acceso general al festival de bandas locales, área de comida y escenario principal.",
-            total_capacity=100,
-            price=15.00
-        )
-        db.add(event1)
-        db.flush()
+        # 1. Create Default Plans
+        plans_data = [
+            {"name": "15 Minutos Rápido", "duration": 15, "price": 0.25, "desc": "Para enviar mensajes y consultas rápidas."},
+            {"name": "1 Hora de Conexión", "duration": 60, "price": 0.50, "desc": "Navegación fluida y redes sociales."},
+            {"name": "3 Horas Continuas", "duration": 180, "price": 1.00, "desc": "Ideal para trabajar, videos y tareas."},
+            {"name": "1 Día Completo (24 Horas)", "duration": 1440, "price": 2.50, "desc": "Acceso ilimitado por 24 horas continuas."},
+            {"name": "1 Semana Ilimitada (7 Días)", "duration": 10080, "price": 10.00, "desc": "Plan semanal para estancias prolongadas."}
+        ]
 
-        # Add 100 general admission tickets
-        tickets_ev1 = []
-        for i in range(1, 101):
-            t = Ticket(
-                event_id=event1.id,
-                seat_number=None,
-                status=TicketStatus.AVAILABLE
+        created_plans = []
+        for p in plans_data:
+            plan = Plan(
+                name=p["name"],
+                duration_minutes=p["duration"],
+                price=p["price"],
+                description=p["desc"]
             )
-            tickets_ev1.append(t)
-        db.bulk_save_objects(tickets_ev1)
-
-        # 2. Event: Reserved Seating
-        event2 = Event(
-            title="Conferencia Tech & Ciberseguridad Offline",
-            description="Asientos numerados en auditorio principal. Acceso a ponencias técnicas y talleres.",
-            total_capacity=30,
-            price=25.00
-        )
-        db.add(event2)
-        db.flush()
-
-        tickets_ev2 = []
-        for i in range(1, 31):
-            t = Ticket(
-                event_id=event2.id,
-                seat_number=f"A-{i:02d}",
-                status=TicketStatus.AVAILABLE
-            )
-            tickets_ev2.append(t)
-        db.bulk_save_objects(tickets_ev2)
+            db.add(plan)
+            created_plans.append(plan)
 
         db.commit()
 
-        # Let's also create 1 pre-sold sample ticket for testing verification in event 1
-        sample_ticket = db.query(Ticket).filter(Ticket.event_id == event1.id).first()
-        if sample_ticket:
-            sample_ticket.status = TicketStatus.SOLD
-            sample_ticket.buyer_name = "Ana Martínez (Demo)"
-            sample_ticket.buyer_contact = "+593 991122334"
-            sample_ticket.qr_hash = generate_ticket_hash(sample_ticket.id, event1.id, sample_ticket.buyer_name)
+        # 2. Create Sample Test Vouchers (Fichas)
+        sample_pins = [
+            {"pin": "123456", "plan": created_plans[1]}, # 1 hora
+            {"pin": "654321", "plan": created_plans[1]}, # 1 hora
+            {"pin": "777888", "plan": created_plans[2]}, # 3 horas
+            {"pin": "999000", "plan": created_plans[3]}, # 24 horas
+        ]
 
-            sample_tx = Transaction(
-                ticket_id=sample_ticket.id,
-                amount=event1.price,
-                status=TransactionStatus.COMPLETED
+        for s in sample_pins:
+            v = Voucher(
+                pin=s["pin"],
+                plan_id=s["plan"].id,
+                duration_minutes=s["plan"].duration_minutes,
+                status=VoucherStatus.AVAILABLE
             )
-            db.add(sample_tx)
-            db.commit()
+            db.add(v)
 
-            print(f"Sample Sold Ticket created for testing:")
-            print(f"  ID: {sample_ticket.id}")
-            print(f"  Buyer: {sample_ticket.buyer_name}")
-            print(f"  QR Hash: {sample_ticket.qr_hash}")
+        db.commit()
 
-        print("Database seeded successfully!")
+        print("\n========================================================")
+        print(" [ÉXITO] Planes de Internet y Fichas Demo Creadas:")
+        for s in sample_pins:
+            print(f"   PIN: {s['pin']} -> {s['plan'].name} (${s['plan'].price:.2f})")
+        print("========================================================\n")
 
     finally:
         db.close()

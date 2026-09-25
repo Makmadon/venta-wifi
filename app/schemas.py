@@ -2,84 +2,88 @@ from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
-# --- Event Schemas ---
-class EventBase(BaseModel):
-    title: str = Field(..., min_length=2, max_length=200)
-    description: Optional[str] = None
-    total_capacity: int = Field(..., gt=0)
+# --- Plan Schemas ---
+class PlanBase(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    duration_minutes: int = Field(..., gt=0)
     price: float = Field(..., ge=0.0)
+    description: Optional[str] = None
 
-class EventCreate(EventBase):
-    has_seat_numbers: bool = False
-    seat_prefix: str = "A"
+class PlanCreate(PlanBase):
+    pass
 
-class EventResponse(EventBase):
+class PlanResponse(PlanBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    is_active: bool
     created_at: datetime
-    available_tickets: int = 0
-    sold_tickets: int = 0
 
-# --- Ticket Schemas ---
-class TicketBase(BaseModel):
+# --- Voucher Schemas ---
+class VoucherGenerateRequest(BaseModel):
+    plan_id: int
+    quantity: int = Field(default=10, ge=1, le=200)
+
+class VoucherResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
-    event_id: int
-    seat_number: Optional[str] = None
+    pin: str
+    plan_id: int
+    duration_minutes: int
     status: str
-
-class TicketResponse(TicketBase):
-    model_config = ConfigDict(from_attributes=True)
-
     created_at: datetime
-    reserved_at: Optional[datetime] = None
-
-class TicketDetailResponse(TicketBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    buyer_name: Optional[str] = None
-    buyer_contact: Optional[str] = None
-    qr_hash: Optional[str] = None
     used_at: Optional[datetime] = None
-    created_at: datetime
-    event_title: Optional[str] = None
-    event_price: Optional[float] = None
-    qr_base64: Optional[str] = None
 
-class SeatStatus(BaseModel):
-    id: str
-    seat_number: str
-    status: str
+class VoucherCard(BaseModel):
+    pin: str
+    plan_name: str
+    duration_minutes: int
+    price: float
+    qr_data: str
 
-# --- Purchase & Transaction Schemas ---
-class PurchaseRequest(BaseModel):
-    event_id: int
-    ticket_id: Optional[str] = None
-    quantity: int = Field(default=1, ge=1, le=10)
-    buyer_name: str = Field(..., min_length=2, max_length=120)
-    buyer_contact: str = Field(..., min_length=3, max_length=120)
-    payment_method: str = Field(default="CASH", max_length=50)
+class VoucherBatchResponse(BaseModel):
+    total_generated: int
+    plan_name: str
+    duration_minutes: int
+    price: float
+    vouchers: List[VoucherCard]
 
-class PurchaseResponse(BaseModel):
+# --- Connection & Session Schemas ---
+class ConnectRequest(BaseModel):
+    pin: str = Field(..., min_length=4, max_length=16)
+
+class ConnectResponse(BaseModel):
     success: bool
     message: str
-    tickets: List[TicketDetailResponse]
-    total_amount: float
+    session_id: str
+    expires_at: datetime
+    remaining_seconds: int
+    total_minutes: int
 
-# --- Verification Schemas ---
-class VerifyRequest(BaseModel):
-    code: str = Field(..., min_length=4)
+class SessionStatusResponse(BaseModel):
+    is_active: bool
+    remaining_seconds: int
+    expires_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    total_minutes: Optional[int] = 0
+    client_ip: str
+    message: Optional[str] = None
 
-class VerifyResponse(BaseModel):
-    status: str  # "VALID", "ALREADY_USED", "INVALID"
-    message: str
-    ticket: Optional[TicketDetailResponse] = None
+class AdminSessionItem(BaseModel):
+    id: str
+    client_ip: str
+    client_mac: Optional[str] = None
+    pin: Optional[str] = None
+    started_at: str
+    expires_at: str
+    remaining_seconds: int
+    status: str
+    device_info: Optional[str] = None
 
 # --- Admin Statistics ---
-class AdminStatsResponse(BaseModel):
-    total_events: int
-    total_tickets: int
-    sold_tickets: int
-    used_tickets: int
-    available_tickets: int
+class AdminHotspotStats(BaseModel):
+    active_sessions: int
+    vouchers_available: int
+    vouchers_sold: int
     total_revenue: float

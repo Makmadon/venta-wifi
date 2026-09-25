@@ -1,42 +1,38 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Network & Captive Interception Teardown Script
+# Hotspot Internet Billing: Network & Gateway Teardown Script
 # ==============================================================================
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "[ERROR] This script must be run as root (e.g., sudo ./scripts/teardown_network.sh)"
+  echo "[ERROR] Este script debe ejecutarse como root (ej: sudo ./scripts/teardown_network.sh)"
   exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-OUTPUT_CONF="$PROJECT_ROOT/network/dnsmasq.conf"
-
-INTERFACE="${1:-wlan0}"
-HOST_IP="${2:-192.168.4.1}"
+HOTSPOT_IFACE="${1:-wlan0}"
+WAN_IFACE="${2:-eth0}"
+HOST_IP="${3:-192.168.4.1}"
 
 echo "=========================================================="
-echo " Tearing down Captive Portal Network & Firewall Rules"
+echo " Restaurando Reglas de Red y Deteniendo Hotspot Gateway"
 echo "=========================================================="
 
-# 1. Stop custom dnsmasq
-echo "[1/3] Stopping dnsmasq instance..."
+# 1. Detener dnsmasq
 if [ -f /run/ticketing_dnsmasq.pid ]; then
   kill "$(cat /run/ticketing_dnsmasq.pid)" 2>/dev/null || true
   rm -f /run/ticketing_dnsmasq.pid
 fi
-pkill -f "dnsmasq.*$OUTPUT_CONF" 2>/dev/null || true
+pkill -f "dnsmasq.*network/dnsmasq.conf" 2>/dev/null || true
 
-# 2. Remove iptables rules
-echo "[2/3] Cleaning iptables NAT and filter rules..."
-iptables -t nat -D PREROUTING -i "$INTERFACE" -p tcp --dport 80 -j REDIRECT --to-ports 8000 2>/dev/null || true
-iptables -D INPUT -i "$INTERFACE" -p udp --dport 53 -j ACCEPT 2>/dev/null || true
-iptables -D INPUT -i "$INTERFACE" -p udp --dport 67:68 --sport 67:68 -j ACCEPT 2>/dev/null || true
-iptables -D INPUT -i "$INTERFACE" -p tcp --dport 8000 -j ACCEPT 2>/dev/null || true
+# 2. Limpiar iptables
+iptables -t nat -D POSTROUTING -o "$WAN_IFACE" -j MASQUERADE 2>/dev/null || true
+iptables -t nat -D PREROUTING -i "$HOTSPOT_IFACE" -p tcp --dport 80 -j REDIRECT --to-ports 8000 2>/dev/null || true
+iptables -D FORWARD -i "$HOTSPOT_IFACE" -j DROP 2>/dev/null || true
+iptables -D INPUT -i "$HOTSPOT_IFACE" -p udp --dport 53 -j ACCEPT 2>/dev/null || true
+iptables -D INPUT -i "$HOTSPOT_IFACE" -p udp --dport 67:68 --sport 67:68 -j ACCEPT 2>/dev/null || true
+iptables -D INPUT -i "$HOTSPOT_IFACE" -p tcp --dport 8000 -j ACCEPT 2>/dev/null || true
 
-# 3. Remove assigned static IP
-echo "[3/3] Removing $HOST_IP/24 from interface $INTERFACE..."
-ip addr del "$HOST_IP/24" dev "$INTERFACE" 2>/dev/null || true
+# 3. Remover IP estática del Hotspot
+ip addr del "$HOST_IP/24" dev "$HOTSPOT_IFACE" 2>/dev/null || true
 
-echo "[SUCCESS] Network teardown complete."
+echo "[ÉXITO] Red restaurada correctamente."

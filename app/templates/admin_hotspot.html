@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}Panel de Control &bull; Venta de Internet Wi-Fi{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.6rem; font-weight: 800;">Control de Acceso y Venta de Internet</h1>
+    <p style="color: var(--text-muted); font-size: 0.9rem;">Monitoreo de conexiones en vivo, generador de fichas PIN y ventas</p>
+  </div>
+  <button id="btn-refresh-stats" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+    Actualizar Métricas
+  </button>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-title">Usuarios Navegando Ahora</div>
+    <div id="stat-active-users" class="stat-value" style="color: var(--success);">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Fichas Disponibles</div>
+    <div id="stat-avail-vouchers" class="stat-value" style="color: var(--primary);">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Fichas Vendidas / Usadas</div>
+    <div id="stat-sold-vouchers" class="stat-value" style="color: #8b5cf6;">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Ingresos Totales</div>
+    <div id="stat-revenue" class="stat-value" style="color: #d97706;">$0.00</div>
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="tabs-nav">
+  <button class="tab-btn active" data-tab="tab-live-sessions">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      Dispositivos Conectados en Vivo
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-vouchers">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="13" y2="12"/></svg>
+      Generador de Fichas (PINs)
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-inventory">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Inventario de Fichas
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-plans">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Tarifas & Planes
+    </span>
+  </button>
+</div>
+
+<!-- Tab 1: Live Sessions (Connected Devices) -->
+<div id="tab-live-sessions" class="tab-content active">
+  <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <div>
+        <h3 style="font-size: 1.1rem; font-weight: 700;">Dispositivos con Acceso a Internet Activo</h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">Al agotarse el tiempo, el sistema les revoca el acceso a internet automáticamente.</p>
+      </div>
+      <button id="btn-manual-refresh-sessions" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">
+        Refrescar Lista
+      </button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>IP del Cliente</th>
+            <th>MAC</th>
+            <th>Ficha / PIN</th>
+            <th>Inicio</th>
+            <th>Expiración</th>
+            <th>Tiempo Restante</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="sessions-table-body">
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              Cargando conexiones activas...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 2: Generator & Print -->
+<div id="tab-vouchers" class="tab-content">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; align-items: start;">
+    
+    <!-- Generate Vouchers Card -->
+    <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem;">Generar Lote de Fichas (PINs)</h3>
+      
+      <form id="form-generate-vouchers">
+        <div class="form-group">
+          <label class="form-label">Seleccionar Plan de Tiempo</label>
+          <select id="gen-plan-select" class="form-select" required>
+            {% for p in plans %}
+            <option value="{{ p.id }}">{{ p.name }} ({{ p.duration_minutes }} min - ${{ "%.2f"|format(p.price) }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Cantidad de Fichas a Generar</label>
+          <select id="gen-quantity" class="form-select">
+            <option value="10">10 Fichas</option>
+            <option value="20" selected>20 Fichas (1 Hoja)</option>
+            <option value="50">50 Fichas</option>
+            <option value="100">100 Fichas</option>
+          </select>
+        </div>
+
+        <button type="submit" id="btn-generate-submit" class="btn btn-primary btn-block">
+          Generar Fichas Ahora
+        </button>
+      </form>
+    </div>
+
+    <!-- Print Vouchers Shortcut Card -->
+    <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; text-align: center;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;">Imprimir Fichas Recortables</h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        Genera una hoja limpia con tarjetas de bolsillo listas para recortar con tijeras y vender en el mostrador.
+      </p>
+
+      <a href="/admin/vouchers/print" target="_blank" class="btn btn-success btn-block" style="font-size: 1.05rem; padding: 0.85rem;">
+        🖨️ Abrir Plantilla de Impresión de Fichas
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<!-- Tab 3: Inventory -->
+<div id="tab-inventory" class="tab-content">
+  <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Fichas en Base de Datos</h3>
+      <select id="filter-voucher-status" class="form-select" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+        <option value="">Todas</option>
+        <option value="AVAILABLE" selected>Disponibles (Para Vender)</option>
+        <option value="USED">Utilizadas</option>
+      </select>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Código PIN</th>
+            <th>Plan</th>
+            <th>Duración</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            <th>Creada</th>
+            <th>Usada Por IP</th>
+          </tr>
+        </thead>
+        <tbody id="vouchers-table-body">
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Cargando fichas...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 4: Plans -->
+<div id="tab-plans" class="tab-content">
+  <div style="max-width: 500px; background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem;">Crear Nueva Tarifa / Plan</h3>
+
+    <form id="form-create-plan">
+      <div class="form-group">
+        <label class="form-label">Nombre del Plan</label>
+        <input type="text" id="plan-name" class="form-input" placeholder="Ej: 2 Horas Especial" required minlength="2">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Duración en Minutos</label>
+        <input type="number" id="plan-duration" class="form-input" placeholder="Ej: 120" min="1" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Precio ($)</label>
+        <input type="number" id="plan-price" class="form-input" placeholder="Ej: 1.50" step="0.25" min="0" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <input type="text" id="plan-desc" class="form-input" placeholder="Ej: Válido para redes sociales y streaming">
+      </div>
+
+      <button type="submit" id="btn-submit-plan" class="btn btn-primary btn-block">
+        Guardar Nuevo Plan
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // Tabs
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabContents = document.querySelectorAll(".tab-content");
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.remove("active"));
+      tabContents.forEach(c => c.classList.remove("active"));
+      btn.classList.add("active");
+      const target = document.getElementById(btn.getAttribute("data-tab"));
+      if (target) target.classList.add("active");
+      if (btn.getAttribute("data-tab") === "tab-inventory") loadInventory();
+    });
+  });
+
+  // Stats
+  async function loadStats() {
+    try {
+      const res = await fetch("/api/admin/stats");
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById("stat-active-users").innerText = data.active_sessions;
+      document.getElementById("stat-avail-vouchers").innerText = data.vouchers_available;
+      document.getElementById("stat-sold-vouchers").innerText = data.vouchers_sold;
+      document.getElementById("stat-revenue").innerText = `$${data.total_revenue.toFixed(2)}`;
+    } catch (e) {}
+  }
+
+  // Live Sessions
+  const sessionsTableBody = document.getElementById("sessions-table-body");
+
+  function formatTimeRemaining(sec) {
+    if (sec <= 0) return "<span style='color: var(--danger); font-weight: 700;'>Expirado</span>";
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `<strong>${m}m ${s}s</strong>`;
+  }
+
+  async function loadLiveSessions() {
+    try {
+      const res = await fetch("/api/admin/sessions");
+      if (!res.ok) return;
+      const sessions = await res.json();
+
+      if (!sessions || sessions.length === 0) {
+        sessionsTableBody.innerHTML = `
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No hay usuarios navegando en este momento.</td></tr>
+        `;
+        return;
+      }
+
+      sessionsTableBody.innerHTML = sessions.map(s => `
+        <tr>
+          <td><strong style="color: var(--primary);">${escapeHtml(s.client_ip)}</strong></td>
+          <td style="font-family: monospace; font-size: 0.75rem;">${escapeHtml(s.client_mac || '-')}</td>
+          <td><span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 700;">${escapeHtml(s.pin || 'Demo')}</span></td>
+          <td>${s.started_at}</td>
+          <td>${s.expires_at}</td>
+          <td>${formatTimeRemaining(s.remaining_seconds)}</td>
+          <td>
+            <div style="display: flex; gap: 4px;">
+              <button onclick="extendSession('${s.id}', 15)" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" title="Regalar 15 minutos">+15m</button>
+              <button onclick="extendSession('${s.id}', 60)" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" title="Regalar 1 hora">+1h</button>
+              <button onclick="revokeSession('${s.id}')" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.75rem; color: var(--danger);" title="Cortar internet ahora">Desconectar</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    } catch (e) {}
+  }
+
+  window.extendSession = async (id, min) => {
+    try {
+      const res = await fetch(`/api/admin/sessions/${id}/extend?minutes=${min}`, { method: "POST" });
+      const data = await res.json();
+      alert(data.message);
+      loadLiveSessions();
+      loadStats();
+    } catch (err) { alert(err.message); }
+  };
+
+  window.revokeSession = async (id) => {
+    if (!confirm("¿Deseas desconectar a este usuario de internet inmediatamente?")) return;
+    try {
+      const res = await fetch(`/api/admin/sessions/${id}/revoke`, { method: "POST" });
+      const data = await res.json();
+      alert(data.message);
+      loadLiveSessions();
+      loadStats();
+    } catch (err) { alert(err.message); }
+  };
+
+  // Generate Vouchers Form
+  const formGenerate = document.getElementById("form-generate-vouchers");
+  const btnGenSubmit = document.getElementById("btn-generate-submit");
+
+  formGenerate.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    btnGenSubmit.disabled = true;
+    btnGenSubmit.innerText = "Generando fichas...";
+
+    try {
+      const planId = parseInt(document.getElementById("gen-plan-select").value, 10);
+      const qty = parseInt(document.getElementById("gen-quantity").value, 10);
+
+      const res = await fetch("/api/admin/vouchers/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_id: planId, quantity: qty })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Error al generar");
+
+      alert(`¡Se generaron ${data.total_generated} fichas con éxito para el plan ${data.plan_name}! Puedes imprimirlas en la vista de impresión.`);
+      loadStats();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btnGenSubmit.disabled = false;
+      btnGenSubmit.innerText = "Generar Fichas Ahora";
+    }
+  });
+
+  // Inventory Table
+  const vouchersTableBody = document.getElementById("vouchers-table-body");
+  const filterVoucherStatus = document.getElementById("filter-voucher-status");
+
+  async function loadInventory() {
+    vouchersTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Cargando fichas...</td></tr>`;
+    try {
+      const st = filterVoucherStatus.value ? `?status_filter=${filterVoucherStatus.value}` : "";
+      const res = await fetch(`/api/admin/vouchers${st}`);
+      const list = await res.json();
+
+      if (!list || list.length === 0) {
+        vouchersTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No hay fichas encontradas.</td></tr>`;
+        return;
+      }
+
+      vouchersTableBody.innerHTML = list.map(v => `
+        <tr>
+          <td><strong style="font-family: monospace; font-size: 1.1rem; color: var(--primary); letter-spacing: 2px;">${v.pin}</strong></td>
+          <td>${escapeHtml(v.plan_name)}</td>
+          <td>${v.duration_minutes} min</td>
+          <td>$${v.price.toFixed(2)}</td>
+          <td>
+            <span style="background: ${v.status === 'AVAILABLE' ? 'var(--success-light)' : '#f1f5f9'}; color: ${v.status === 'AVAILABLE' ? 'var(--success)' : 'var(--text-muted)'}; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">
+              ${v.status === 'AVAILABLE' ? 'Disponible' : 'Utilizada'}
+            </span>
+          </td>
+          <td>${v.created_at}</td>
+          <td>${v.used_by_ip}</td>
+        </tr>
+      `).join("");
+    } catch (e) {}
+  }
+
+  filterVoucherStatus.addEventListener("change", loadInventory);
+
+  // Create Plan Form
+  const formPlan = document.getElementById("form-create-plan");
+  formPlan.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        name: document.getElementById("plan-name").value.trim(),
+        duration_minutes: parseInt(document.getElementById("plan-duration").value, 10),
+        price: parseFloat(document.getElementById("plan-price").value),
+        description: document.getElementById("plan-desc").value.trim() || null
+      };
+      const res = await fetch("/api/admin/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("Error al guardar plan");
+      alert("¡Plan creado exitosamente!");
+      window.location.reload();
+    } catch (err) { alert(err.message); }
+  });
+
+  function escapeHtml(text) {
+    if (!text) return "";
+    return text.replace(/[&<>"']/g, m => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+    })[m]);
+  }
+
+  // Polling
+  loadStats();
+  loadLiveSessions();
+  setInterval(loadLiveSessions, 4000);
+  setInterval(loadStats, 10000);
+});
+</script>
+{% endblock %}

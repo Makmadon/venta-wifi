@@ -1,4 +1,4 @@
-import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -7,19 +7,36 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base
-from app.routers import captive, events, tickets, admin, catchall
+from app.database import engine, Base, SessionLocal
+from app.routers import captive, portal, admin_hotspot, catchall
+from app.services import session_manager
+
+async def session_expiration_watcher():
+    """
+    Background worker loop: checks active sessions every 5 seconds.
+    When a user's prepaid time is up, immediately revokes their internet access!
+    """
+    while True:
+        try:
+            with SessionLocal() as db:
+                session_manager.check_and_expire_sessions(db)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Ensure database schema is created
     Base.metadata.create_all(bind=engine)
+    # Start background session watcher
+    watcher_task = asyncio.create_task(session_expiration_watcher())
     yield
+    watcher_task.cancel()
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Autonomous local ticketing POS and captive portal system",
-    version="1.0.0",
+    description="Sistema Autónomo de Venta de Acceso a Internet y Portal Cautivo Hotspot",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -35,27 +52,14 @@ app.add_middleware(
 # Mount Static Assets
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
-# Jinja2 Templates
-templates = Jinja2Templates(directory=settings.TEMPLATES_DIR)
-
-# Root captive landing page
-@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse, tags=["Portal Home"])
-def portal_home(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"settings": settings}
-    )
-
 # 1. Captive Network Assistant probes (Android, iOS, Windows)
 app.include_router(captive.router)
 
-# 2. Public API routers
-app.include_router(events.router)
-app.include_router(tickets.router)
+# 2. Client Portal & Internet Access APIs
+app.include_router(portal.router)
 
-# 3. Admin & Gatekeeper verification
-app.include_router(admin.router)
+# 3. Admin Dashboard, POS & Voucher Generator
+app.include_router(admin_hotspot.router)
 
 # 4. Catch-all router for unmapped captive queries (MUST be registered last)
 app.include_router(catchall.router)

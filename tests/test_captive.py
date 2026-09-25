@@ -8,7 +8,7 @@ def test_portal_homepage():
     """Verify that root landing page serves HTTP 200."""
     response = client.get("/")
     assert response.status_code == 200
-    assert "Portal de Boletos" in response.text
+    assert "Internet Wi-Fi Hotspot" in response.text
 
 def test_android_cna_probes():
     """Verify Android generate_204 probes redirect to portal."""

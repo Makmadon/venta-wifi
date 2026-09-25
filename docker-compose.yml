@@ -18,16 +18,18 @@ services:
       - NET_RAW
 
     environment:
-      # Network interface connected to router or hotspot
-      - INTERFACE=wlan0
+      # Network interface providing upstream Internet connection (WAN)
+      - WAN_INTERFACE=eth0
+      # Network interface where clients connect (Hotspot Wi-Fi / AP)
+      - HOTSPOT_INTERFACE=wlan0
       # Server IP, default gateway and captive portal target
       - HOST_IP=192.168.4.1
       - NETMASK=255.255.255.0
       - DHCP_START=192.168.4.50
       - DHCP_END=192.168.4.200
-      # Set to 'false' if you prefer to run dnsmasq/iptables directly on the host
-      - ENABLE_NETWORK_SETUP=true
-      # Cryptographic secret for tamper-proof HMAC ticket QR signatures
+      # Set to 'false' if testing in dev mode without managing system network
+      - ENABLE_NETWORK_SETUP=false
+      # Cryptographic secret
       - SECRET_KEY=offline-secure-portal-key-2026-production
       # Persistent SQLite database path mapped to the volume below
       - DATABASE_URL=sqlite:////app/data/tickets.db

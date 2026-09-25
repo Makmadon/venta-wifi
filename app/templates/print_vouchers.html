@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Plantilla de Fichas Recortables Wi-Fi</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 1.5rem;
+    }
+    .no-print-bar {
+      max-width: 900px;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+    }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-secondary { background: #e2e8f0; color: #1e293b; }
+
+    /* Voucher Cards Grid */
+    .vouchers-grid {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    /* Individual Cutout Card */
+    .voucher-card {
+      background: white;
+      border: 2px dashed #64748b;
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      page-break-inside: avoid;
+      position: relative;
+    }
+
+    .card-brand {
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #64748b;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .card-plan {
+      font-size: 1.15rem;
+      font-weight: 900;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+
+    .card-pin-box {
+      background: #f8fafc;
+      border: 2px solid #0f172a;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin: 6px 0;
+      width: 100%;
+    }
+
+    .card-pin-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+
+    .card-pin {
+      font-size: 1.6rem;
+      font-weight: 900;
+      font-family: monospace;
+      letter-spacing: 4px;
+      color: #2563eb;
+    }
+
+    .card-qr {
+      width: 110px;
+      height: 110px;
+      margin: 6px 0;
+      border: 1px solid #e2e8f0;
+      padding: 4px;
+      border-radius: 4px;
+    }
+
+    .card-footer {
+      font-size: 0.65rem;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.2;
+    }
+
+    .card-price-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #10b981;
+      color: white;
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .no-print-bar { display: none !important; }
+      .vouchers-grid { max-width: 100%; gap: 8px; }
+      .voucher-card { border: 1.5px dashed #000; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-bar">
+    <div>
+      <h2 style="font-size: 1.2rem;">Plantilla de Fichas Wi-Fi para Imprimir ({{ vouchers|length }} fichas)</h2>
+      <p style="font-size: 0.85rem; color: #64748b;">Imprime y recorta con tijeras para vender en mostrador.</p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/admin" class="btn btn-secondary">&larr; Volver al Panel</a>
+      <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir Fichas</button>
+    </div>
+  </div>
+
+  <div class="vouchers-grid">
+    {% for v in vouchers %}
+    <div class="voucher-card">
+      <div class="card-price-badge">${{ "%.2f"|format(v.price) }}</div>
+      <div class="card-brand">ACCESO A INTERNET WI-FI</div>
+      <div class="card-plan">{{ v.plan_name }}</div>
+
+      <div class="card-pin-box">
+        <div class="card-pin-label">CÓDIGO PIN:</div>
+        <div class="card-pin">{{ v.pin }}</div>
+      </div>
+
+      <img src="{{ v.qr_b64 }}" alt="QR Login" class="card-qr">
+
+      <div class="card-footer">
+        1. Conéctate a la red Wi-Fi.<br>
+        2. Ingresa el PIN o escanea este código QR.
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

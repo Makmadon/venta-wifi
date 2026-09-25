@@ -1,50 +1,54 @@
-# Local Ticketing & Captive Portal System
+# Sistema de Venta de Acceso a Internet Wi-Fi (Hotspot Billing & Portal Cautivo)
 
-Un sistema autónomo e integral de **Punto de Venta (POS), Emisión de Boletos y Portal Cautivo Local**, diseñado para operar 100% desconectado de internet en un equipo host conectado por Ethernet o Wi-Fi a un router local aislado.
+Un sistema autónomo e integral para **vender acceso a internet por tiempo mediante fichas (PINs / Vouchers)**, control de ancho de banda y corte automático de conexión al finalizar el tiempo contratado.
 
----
-
-## 1. Características Principales
-
-* **Intercepción Automática de Clientes (Portal Cautivo / CPD):**
-  * Responde a las sondas de detección de conectividad de los principales sistemas operativos (Android `/generate_204`, Apple iOS/macOS `/hotspot-detect.html`, Windows `/ncsi.txt` y `/connecttest.txt`, Firefox/Linux).
-  * Redirección HTTP comodín (*Catch-All*) para cualquier petición GET/HEAD no reconocida hacia el portal de venta.
-* **Cero Sobrevendidos (Garantía de Aislamiento Transaccional):**
-  * SQLite configurado en modo WAL (`PRAGMA journal_mode=WAL;`) con `PRAGMA busy_timeout=10000;`.
-  * Transacciones atómicas explícitas (`BEGIN IMMEDIATE`) y actualizaciones condicionales optimistas:
-    ```sql
-    UPDATE tickets 
-    SET status = 'SOLD', buyer_name = :name, buyer_contact = :contact, qr_hash = :hash 
-    WHERE id = :ticket_id AND status = 'AVAILABLE';
-    ```
-  * Verificado con pruebas de estrés concurrentes multi-hilo (25 hilos simultáneos disputando inventario limitado sin duplicados).
-* **Firma Criptográfica y Generación de Códigos QR:**
-  * Códigos QR generados localmente como SVG embebido o Base64 PNG.
-  * Firma HMAC-SHA256 para prevenir falsificaciones en entornos offline.
-* **Panel de Administración y Control de Acceso (Puerta):**
-  * Escáner QR en vivo utilizando la cámara del dispositivo móvil/laptop (biblioteca `jsQR` 100% offline, sin dependencias CDN).
-  * Soporte para lectores de código de barras/QR USB o ingreso manual.
-  * Prevención de re-ingreso / fraude de doble entrada: Si un boleto ya fue marcado como `USED`, emite una alerta roja y sonido de advertencia.
-  * Punto de Venta Rápido (POS) para taquilla en puerta.
-  * Métricas en tiempo real: ingresos, boletos vendidos, validados y disponibles.
-* **100% Autónomo y Offline:**
-  * Cero dependencias en la nube o fuentes externas (CSS, JavaScript, sintetizador de audio Web Audio API, SVGs locales).
+Ideal para cyber-cafés, plazas comerciales, hoteles, residencias, terminales o comunidades donde se desea compartir/revender una conexión a internet de forma controlada y monetizada.
 
 ---
 
-## 2. Arquitectura del Sistema
+## 1. ¿Cómo Funciona el Negocio y el Flujo de Usuario?
 
 ```mermaid
-flowchart TD
-    Client["Dispositivo Móvil / Laptop del Cliente"] -->|"Conexión Wi-Fi / DHCP"| Dnsmasq["Dnsmasq (DHCP + Wildcard DNS)"]
-    Dnsmasq -->|"DNS Query: * -> 192.168.4.1"| Client
-    Client -->|"HTTP GET Port 80"| IPTables["iptables PREROUTING\n(Port 80 -> 8000)"]
-    IPTables -->|"HTTP Port 8000 (No Root)"| FastAPI["Servicio Backend FastAPI\n(Python 3.11+ / Uvicorn)"]
-    FastAPI --> CPD["Sondas CPD\n(/generate_204, /hotspot-detect.html, etc.)"]
-    FastAPI --> PortalUI["UI de Compra & Mapa de Asientos\n(HTML5 / CSS / JS Offline)"]
-    FastAPI --> AdminUI["Control de Acceso / Escáner QR / POS\n(jsQR + Web Audio)"]
-    FastAPI -->|"Transacciones Atómicas\nBEGIN IMMEDIATE"| DB[("SQLite WAL Mode\n(tickets.db)")]
+sequenceDiagram
+    autonumber
+    actor Cliente as Celular / Laptop del Cliente
+    participant Gateway as Servidor Hotspot (FastAPI + iptables)
+    actor Dueño as Administrador / Tienda
+    participant Internet as Salida a Internet (WAN)
+
+    Note over Dueño,Gateway: 1. El dueño genera e imprime fichas PIN (ej: 1 Hora = $0.50)
+    Cliente->>Gateway: 2. Se conecta al Wi-Fi del local (Tráfico bloqueado por defecto)
+    Gateway-->>Cliente: 3. Salta automáticamente el Portal Cautivo (CPD)
+    Note over Cliente: 4. El cliente compra una ficha en caja e ingresa su PIN
+    Cliente->>Gateway: 5. Envía PIN al portal (POST /api/connect)
+    Gateway->>Gateway: 6. Valida PIN, activa temporizador y abre iptables FORWARD
+    Gateway->>Internet: 7. ¡Cliente navegando libremente con contador regresivo!
+    
+    Note over Gateway: 8. Worker en segundo plano monitorea el tiempo (cada 5s)
+    alt Cuando el tiempo llega a cero (00:00:00)
+        Gateway->>Gateway: 9. Corta iptables FORWARD y borra conntrack
+        Gateway-->>Cliente: 10. Bloquea internet y muestra: "Tu tiempo ha terminado"
+    end
 ```
+
+---
+
+## 2. Características Principales
+
+* **Control de Acceso Dinámico por Firewall:**
+  * Por defecto, los clientes recién conectados **NO tienen acceso a internet** (la cadena `FORWARD` de iptables descarta su tráfico hacia la WAN).
+  * Al ingresar un PIN válido o activar una prueba gratis, el sistema inserta dinámicamente reglas en `iptables` autorizando la IP/MAC del dispositivo específico.
+  * Cuando el tiempo contratado expira, un worker en segundo plano **revoca el acceso de inmediato** y corta las conexiones activas (`conntrack`), devolviendo al usuario al portal cautivo.
+* **Portal Cautivo Responsivo con Contador Regresivo en Vivo:**
+  * Intercepción automática en **Android** (`/generate_204`), **Apple iOS/macOS** (`/hotspot-detect.html`), **Windows** (`/ncsi.txt`) y cualquier navegador web.
+  * Muestra el tiempo restante en formato `HH:MM:SS` sincronizado con el servidor.
+  * Permite **recargar más tiempo** (ingresar otro PIN para sumar minutos a la sesión activa sin desconectarse).
+  * Opción de **Prueba Gratuita (Free Trial)** de 5 minutos por dirección MAC (para que el cliente verifique la velocidad antes de pagar).
+* **Panel de Administración para el Dueño del Negocio (`/admin`):**
+  * **Generador e Impresión de Fichas (Vouchers):** Genera lotes de 10, 20 o 50 fichas e imprime hojas con tarjetas recortables de bolsillo listas para vender en caja. Cada tarjeta incluye el PIN, duración, precio y un código QR para autoconectarse al escanearlo con la cámara.
+  * **Monitoreo de Dispositivos Conectados en Tiempo Real:** Lista de celulares/laptops navegando ahora mismo, IP, MAC, tiempo restante en vivo, botón para regalar tiempo (`+15 min`, `+1 hora`) o **"Desconectar"** (cortar internet manualmente).
+  * **Gestión de Tarifas y Planes:** Configuración de planes personalizados (ej: 15 min, 1 hora, 3 horas, 1 día, 1 semana).
+  * **Métricas de Ganancias:** Total de fichas vendidas y dinero recaudado.
 
 ---
 
@@ -53,164 +57,109 @@ flowchart TD
 ```
 venta-wifi/
 ├── app/
-│   ├── config.py             # Configuración del sistema y variables de entorno
-│   ├── database.py           # Conexión SQLite con WAL, busy_timeout y pragmas
-│   ├── models.py             # Modelos SQLAlchemy (Event, Ticket, Transaction)
-│   ├── schemas.py            # Modelos Pydantic v2 para validación de API
-│   ├── security.py           # Firma criptográfica HMAC-SHA256
-│   ├── qr_service.py         # Generador de códigos QR (SVG, PNG, Data URI)
+│   ├── config.py              # Configuración de interfaces (WAN/Hotspot), IP y tarifas
+│   ├── database.py            # SQLite optimizado con modo WAL y timeout
+│   ├── firewall.py            # Módulo de control de iptables (autorizar / revocar internet)
+│   ├── models.py              # Modelos: Plan, Voucher (Ficha), Session, Sale, TrialRecord
+│   ├── schemas.py             # Validación de solicitudes API con Pydantic v2
+│   ├── qr_service.py          # Generación de códigos QR para las fichas recortables
+│   ├── services/
+│   │   └── session_manager.py # Lógica de activación de PINs, recargas y expiración
 │   ├── routers/
-│   │   ├── captive.py        # Sondas de detección de portal cautivo (Android/Apple/Windows)
-│   │   ├── events.py         # Catálogo de eventos y mapas de asientos interactivos
-│   │   ├── tickets.py        # Compra atómica y renderizado de boletos digitales
-│   │   ├── admin.py          # Validación en puerta, métricas en vivo y creación de eventos
-│   │   └── catchall.py       # Redirección comodín para navegación no autenticada
+│   │   ├── portal.py          # Portal del cliente (canje de PIN, prueba gratis, estado)
+│   │   ├── admin_hotspot.py   # Panel de control, generador de fichas y monitoreo
+│   │   ├── captive.py         # Sondas de detección para Android, iOS y Windows
+│   │   └── catchall.py        # Redirección comodín para tráfico no autenticado
 │   ├── static/
-│   │   ├── css/style.css     # Estilos responsivos, interfaz de boletos y @media print
-│   │   └── js/
-│   │       ├── app.js        # Lógica del cliente, selector de asientos y compra
-│   │       ├── admin.js      # Lógica de taquilla, escáner de cámara y audio sintetizado
-│   │       └── jsqr.min.js   # Biblioteca jsQR 100% offline para lectura de cámara
+│   │   └── css/style.css      # Estilos offline responsivos
 │   └── templates/
-│       ├── base.html         # Plantilla base con indicadores de estado offline
-│       ├── index.html        # Portal cautivo / catálogo de entradas
-│       ├── ticket.html       # Vista del boleto imprimible con QR y firma de seguridad
-│       └── admin.html        # Panel de administración, POS y escáner
-├── network/
-│   ├── dnsmasq.conf.template # Plantilla declarativa para DHCP y DNS comodín
-│   └── dnsmasq.conf          # Configuración generada para la interfaz de red
+│       ├── portal.html        # Interfaz del cliente (contador regresivo y canje de PIN)
+│       ├── admin_hotspot.html # Panel del administrador y monitoreo en vivo
+│       └── print_vouchers.html# Plantilla de fichas recortables de bolsillo
 ├── scripts/
-│   ├── setup_network.sh      # Script de configuración de IP, iptables y dnsmasq (requiere sudo)
-│   ├── teardown_network.sh   # Script de limpieza y restauración de red (requiere sudo)
-│   ├── seed_data.py          # Inicializador con eventos de demostración y boletos
-│   └── run_portal.sh         # Lanzador del servicio web FastAPI en el puerto 8000
-├── systemd/
-│   ├── ticketing-portal.service # Unidad systemd para el backend de usuario
-│   └── dnsmasq-portal.service   # Unidad systemd para el orquestador de red
+│   ├── setup_network.sh       # Configura iptables NAT, bloqueo de reenvío y dnsmasq
+│   ├── teardown_network.sh    # Restaura la red y elimina reglas de iptables
+│   ├── seed_data.py           # Crea planes por defecto y fichas de prueba iniciales
+│   └── run_portal.sh          # Inicia el backend en el puerto 8000
+├── docker/
+│   └── entrypoint.sh          # Orquestador del contenedor Docker
+├── docker-compose.yml         # Despliegue con Docker Compose
+├── Dockerfile                 # Imagen Docker con dnsmasq, iptables y Python
 ├── tests/
-│   ├── test_captive.py       # Pruebas automatizadas de sondas CPD y catch-all
-│   ├── test_concurrency.py   # Pruebas de estrés y garantía de cero sobreventas
-│   └── test_tickets.py       # Ciclo de vida de boletos, QR y prevención de doble entrada
-├── requirements.txt          # Dependencias de Python
-├── main.py                   # Punto de entrada de la aplicación FastAPI
-└── README.md
+│   ├── test_captive.py        # Pruebas de intercepción de portal cautivo
+│   └── test_hotspot_billing.py# Pruebas de canje de PIN, recarga y expiración
+├── requirements.txt
+├── QUICKSTART.md              # Guía rápida para retomar el proyecto
+└── main.py                    # Entrada principal con worker de expiración en segundo plano
 ```
 
 ---
 
-## 4. Instalación y Puesta en Marcha
+## 4. Cómo Probarlo sin Tocar tu Wi-Fi ni Perder Internet (Modo Simulación / Desarrollo)
 
-### Requisitos Previos
-* Sistema Operativo: Linux (Debian, Ubuntu, Raspberry Pi OS).
-* Python 3.11+ con soporte para `venv`.
-* Herramientas de red: `dnsmasq`, `iptables`, `iproute2`.
+Puedes probar el 100% de la lógica (canje de PINs, contador regresivo en vivo, aviso de tiempo agotado, generador de fichas recortables y panel de administración) en tu computadora sin desconectarte del Wi-Fi de tu casa:
 
+1. **Inicia el servidor:**
+   ```bash
+   ./scripts/run_portal.sh
+   ```
+2. **Abre el Portal de Cliente:**
+   👉 `http://localhost:8000`
+   * Ingresa el PIN demo `123456` o `654321` (vienen precargados con 1 hora cada uno).
+   * Verás cómo se activa la conexión y el reloj regresivo empieza a descontar segundos.
+   * Si ingresas el PIN `777888` mientras estás conectado, verás cómo se recargan 3 horas adicionales a tu sesión.
+3. **Abre el Panel de Administrador:**
+   👉 `http://localhost:8000/admin`
+   * Verás tu dispositivo conectado en la tabla en vivo.
+   * Puedes regalarle `+15m`, `+1h` o presionar **"Desconectar"**.
+   * Ve a la pestaña **"Generador de Fichas"** y genera 20 fichas de 1 hora.
+   * Haz clic en **"🖨️ Abrir Plantilla de Impresión de Fichas"** para ver las tarjetas recortables listas para imprimir.
+
+---
+
+## 5. Puesta en Marcha en Producción (Gateway Real con Salida a Internet)
+
+Para ponerlo a operar en un router físico o negocio real donde la computadora recibe internet por un cable/interfaz y reparte a los clientes por Wi-Fi:
+
+1. **Identifica tus interfaces de red:**
+   * Interfaz con Internet (WAN): Ej. `eth0`
+   * Interfaz hacia los clientes (Hotspot/AP): Ej. `wlan0`
+2. **Ejecuta el script de red como root:**
+   ```bash
+   # Sintaxis: sudo ./scripts/setup_network.sh <interfaz_clientes> <interfaz_internet> [ip_gateway]
+   sudo ./scripts/setup_network.sh wlan0 eth0 192.168.4.1
+   ```
+3. **Inicia el backend:**
+   ```bash
+   ./scripts/run_portal.sh
+   ```
+4. **Al terminar el día (o para desactivar):**
+   ```bash
+   sudo ./scripts/teardown_network.sh wlan0 eth0 192.168.4.1
+   ```
+
+---
+
+## 6. Despliegue con Docker
+
+Si prefieres levantarlo con Docker Compose:
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-venv dnsmasq iptables
+# Construir y levantar
+sudo docker compose up --build -d
+
+# Ver registros en tiempo real
+sudo docker compose logs -f
+
+# Detener el servicio
+sudo docker compose down
 ```
 
-### Paso 1: Configurar el Entorno Virtual de Python
-```bash
-python3 -m venv venv
-./venv/bin/pip install -r requirements.txt
-```
+---
 
-### Paso 2: Inicializar la Base de Datos con Datos de Prueba
-```bash
-./venv/bin/python scripts/seed_data.py
-```
+## 7. Ejecución de Pruebas Automatizadas
 
-### Paso 3: Ejecutar las Pruebas Automatizadas
-Verifica la integridad de las sondas cautivas, las firmas criptográficas y el aislamiento contra sobreventas:
+Para validar que las sondas de detección de sistemas operativos y la expiración de tiempo funcionen al 100%:
 ```bash
 PYTHONPATH=. ./venv/bin/pytest -v
 ```
-
-### Paso 4: Iniciar el Backend (Como usuario normal)
-El backend corre en el puerto `8000` (sin privilegios de root):
-```bash
-./scripts/run_portal.sh
-```
-
----
-
-## 5. Orquestación de Red y Portal Cautivo (Producción / Router Aislado)
-
-Para que el servidor intercepte a los dispositivos clientes que se conectan al Wi-Fi o router:
-
-### Configurar Interfaz de Red y Redirección (Requiere privilegios root)
-Ejecuta el script indicando la interfaz de red conectada al router o hotspot (por ejemplo `eth0` o `wlan0`):
-```bash
-sudo ./scripts/setup_network.sh wlan0 192.168.4.1
-```
-
-Este script realiza automáticamente:
-1. Asigna la IP estática `192.168.4.1/24` a la interfaz.
-2. Habilita el reenvío de paquetes IPv4 en el kernel (`net.ipv4.ip_forward=1`).
-3. Crea la regla en iptables NAT PREROUTING:
-   ```bash
-   iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 80 -j REDIRECT --to-ports 8000
-   ```
-4. Genera `network/dnsmasq.conf` configurando:
-   * Rango DHCP: `192.168.4.50` a `192.168.4.200`.
-   * Puerta de enlace y DNS principal: `192.168.4.1`.
-   * Resolución comodín: `address=/#/192.168.4.1`.
-5. Inicia el demonio `dnsmasq`.
-
-### Desmontar la Red (Teardown)
-Para restablecer las reglas de firewall y detener dnsmasq al terminar el evento:
-```bash
-sudo ./scripts/teardown_network.sh wlan0 192.168.4.1
-```
-
----
-
-## 6. Endpoints y Funcionamiento de las Sondas Cautivas
-
-| Sistema Operativo | URL de Sonda | Respuesta del Servidor | Efecto en el Cliente |
-| :--- | :--- | :--- | :--- |
-| **Android** | `/generate_204`, `/gen_204` | `HTTP 302` a `http://192.168.4.1/` | Notificación del sistema "Acceder a la red Wi-Fi" |
-| **Apple iOS / macOS** | `/hotspot-detect.html` | `HTTP 302` a `http://192.168.4.1/` | Se abre automáticamente la ventana del Captive Network Assistant (CNA) |
-| **Windows** | `/ncsi.txt`, `/connecttest.txt` | `HTTP 302` a `http://192.168.4.1/` | El globo del área de notificación invita a iniciar sesión |
-| **Cualquier Navegador** | `GET /sitio-web-externo.html` | `HTTP 302` a `http://192.168.4.1/` | Intercepción transparente y redirección al portal de compra |
-
----
-
-## 8. Despliegue con Docker y Docker Compose
-
-Todo el sistema (FastAPI, SQLite WAL, Dnsmasq, reglas iptables y portal cautivo) está completamente containerizado y puede levantarse con un solo comando.
-
-### Consideraciones Clave para Contenedores Cautivos
-Un portal cautivo y servidor DHCP dentro de Docker requiere dos configuraciones de red fundamentales:
-1. **`network_mode: "host"`**:
-   El protocolo DHCP emite paquetes de difusión en capa 2 (broadcast UDP puertos 67 y 68). La red estándar tipo `bridge` de Docker aísla este tráfico del hardware físico. Con `host`, el contenedor se enlaza directamente a la tarjeta Wi-Fi (`wlan0`) o Ethernet (`eth0`).
-2. **`cap_add: [ "NET_ADMIN", "NET_RAW" ]`**:
-   Permite al contenedor gestionar la redirección de puertos en `iptables` (puerto 80 $\rightarrow$ 8000) y asignar la IP del gateway sin necesidad de privilegios completos de root en el host.
-
-### Puesta en Marcha Rápida con Docker Compose
-
-1. **Editar las variables de red en `docker-compose.yml` (opcional):**
-   Asegúrate de que `INTERFACE` coincida con tu tarjeta de red conectada al router (`wlan0`, `eth0`, etc.):
-   ```yaml
-   environment:
-     - INTERFACE=wlan0
-     - HOST_IP=192.168.4.1
-   ```
-
-2. **Construir e Iniciar el Contenedor:**
-   ```bash
-   sudo docker compose up --build -d
-   ```
-
-3. **Verificar los Logs del Contenedor:**
-   ```bash
-   sudo docker compose logs -f
-   ```
-
-4. **Detener el Contenedor y Restaurar Reglas:**
-   ```bash
-   sudo docker compose down
-   ```
-   El script de entrada intercepta automáticamente `SIGTERM` y limpia las reglas de `iptables` y el proceso `dnsmasq`.
-
+*(12 pruebas aprobadas).*
