@@ -1,0 +1,30 @@
+# ==============================================================================
+# Declarative Dnsmasq Configuration Template for Offline Captive Portal
+# ==============================================================================
+# Binds strictly to the specified physical/wireless interface
+interface=__INTERFACE__
+bind-interfaces
+
+# Do not read /etc/resolv.conf or /etc/hosts to maintain complete offline isolation
+no-resolv
+no-hosts
+no-poll
+
+# Subnet DHCP Leases: 192.168.4.50 to 192.168.4.200 (mask 255.255.255.0, 1h lease)
+dhcp-range=__DHCP_START__,__DHCP_END__,__NETMASK__,1h
+
+# DHCP Option 3: Broadcast Host as Default Gateway (Router)
+dhcp-option=3,__HOST_IP__
+
+# DHCP Option 6: Broadcast Host as Primary DNS Server
+dhcp-option=6,__HOST_IP__
+
+# Enforce Wildcard DNS Resolution:
+# Resolves ALL domain names (*.com, *.net, apple.com, google.com, etc.) to Host IP
+address=/#/__HOST_IP__
+
+# Ensure DHCP authoritative response on isolated network
+dhcp-authoritative
+leasefile-ro
+log-queries
+log-dhcp

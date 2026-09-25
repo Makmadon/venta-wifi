@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Panel de Control &bull; Taquilla y Validación{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.6rem; font-weight: 800;">Panel de Administración y Puerta</h1>
+    <p style="color: var(--text-muted); font-size: 0.9rem;">Validación de accesos por QR, auditoría de asistencia y ventas en taquilla</p>
+  </div>
+  <button id="btn-refresh-stats" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+    Actualizar Métricas
+  </button>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-title">Ingresos Totales</div>
+    <div id="stat-revenue" class="stat-value" style="color: var(--success);">$0.00</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Boletos Vendidos</div>
+    <div id="stat-sold" class="stat-value" style="color: var(--primary);">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Ingresos Validados (Usados)</div>
+    <div id="stat-used" class="stat-value" style="color: #8b5cf6;">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Boletos Disponibles</div>
+    <div id="stat-available" class="stat-value" style="color: var(--text-muted);">0</div>
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="tabs-nav">
+  <button class="tab-btn active" data-tab="tab-scanner">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+      Escáner QR & Validación
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-pos">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      Venta en Taquilla (POS)
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-attendees">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Asistentes & Boletos
+    </span>
+  </button>
+  <button class="tab-btn" data-tab="tab-new-event">
+    <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Crear Evento
+    </span>
+  </button>
+</div>
+
+<!-- Tab 1: Scanner -->
+<div id="tab-scanner" class="tab-content active">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; align-items: start;">
+    
+    <!-- Camera Viewport Card -->
+    <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">Cámara de Entrada</h3>
+        <button id="btn-toggle-camera" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+          Iniciar Cámara
+        </button>
+      </div>
+
+      <div class="scanner-container">
+        <video id="scanner-video" playsinline></video>
+        <canvas id="scanner-canvas" style="display: none;"></canvas>
+        <div id="scanner-overlay" class="scanner-overlay">
+          <div class="scanner-target-box"></div>
+        </div>
+        <div id="scanner-idle-msg" style="position: absolute; color: #94a3b8; font-size: 0.9rem; text-align: center; padding: 1rem;">
+          Presiona "Iniciar Cámara" o utiliza un lector USB / ingreso manual a la derecha.
+        </div>
+      </div>
+
+      <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center;">
+        Apunta la cámara al código QR del boleto del asistente para verificación instantánea.
+      </p>
+    </div>
+
+    <!-- Verification Result & Manual Input Card -->
+    <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Ingreso Manual / Lector Código</h3>
+
+      <form id="manual-verify-form" style="margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label class="form-label">Hash Criptográfico o UUID de Boleto</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="input-verify-code" class="form-input" placeholder="Pegar código o escanear con pistola USB..." autofocus autocomplete="off">
+            <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+              Validar
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Verification Alert Display -->
+      <div id="verify-result-card" style="display: none; border-radius: var(--radius-md); padding: 1.25rem; border: 2px solid transparent;">
+        <div id="verify-result-badge" style="font-weight: 800; font-size: 1.2rem; margin-bottom: 0.5rem;"></div>
+        <p id="verify-result-msg" style="font-size: 0.95rem; margin-bottom: 1rem;"></p>
+        
+        <div id="verify-result-details" style="font-size: 0.85rem; background: white; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid rgba(0,0,0,0.1);">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Tab 2: POS Quick Sale -->
+<div id="tab-pos" class="tab-content">
+  <div style="max-width: 550px; background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Venta en Taquilla Física (Efectivo)</h3>
+    <form id="pos-sale-form">
+      <div class="form-group">
+        <label class="form-label">Seleccionar Evento</label>
+        <select id="pos-event-select" class="form-select" required>
+          {% for ev in events %}
+          <option value="{{ ev.id }}" data-price="{{ ev.price }}">{{ ev.title }} (${{ "%.2f"|format(ev.price) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Nombre del Comprador</label>
+        <input type="text" id="pos-buyer-name" class="form-input" placeholder="Nombre completo" required minlength="2">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Teléfono o Cédula (Opcional)</label>
+        <input type="text" id="pos-buyer-contact" class="form-input" placeholder="Contacto de referencia" value="Taquilla Puerta">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cantidad de Entradas</label>
+        <select id="pos-quantity" class="form-select">
+          <option value="1">1 Entrada</option>
+          <option value="2">2 Entradas</option>
+          <option value="3">3 Entradas</option>
+          <option value="4">4 Entradas</option>
+          <option value="5">5 Entradas</option>
+        </select>
+      </div>
+
+      <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 1.2rem; color: var(--primary);">
+          <span>Total Cobrado:</span>
+          <span id="pos-total-amount">$0.00</span>
+        </div>
+      </div>
+
+      <button type="submit" id="btn-pos-submit" class="btn btn-success btn-block">
+        Cobrar en Efectivo y Emitir Boleto
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Tab 3: Attendees & Search -->
+<div id="tab-attendees" class="tab-content">
+  <div style="background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Auditoría de Boletos Emitidos</h3>
+      
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <select id="filter-ticket-status" class="form-select" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+          <option value="">Todos los Estados</option>
+          <option value="SOLD">Vendidos (Por Ingresar)</option>
+          <option value="USED">Ingresados (Usados)</option>
+          <option value="AVAILABLE">Disponibles</option>
+        </select>
+        
+        <input type="text" id="filter-ticket-query" class="form-input" placeholder="Buscar por nombre, asiento, ID..." style="width: 220px; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+        
+        <button id="btn-filter-tickets" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+          Buscar
+        </button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID Boleto</th>
+            <th>Evento</th>
+            <th>Asiento</th>
+            <th>Estado</th>
+            <th>Titular</th>
+            <th>Contacto</th>
+            <th>Ingreso (UTC)</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="attendees-table-body">
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              Cargando lista de boletos...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 4: Create Event -->
+<div id="tab-new-event" class="tab-content">
+  <div style="max-width: 550px; background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem;">
+    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">Crear Nuevo Evento</h3>
+    <form id="create-event-form">
+      <div class="form-group">
+        <label class="form-label">Título del Evento</label>
+        <input type="text" id="ev-title" class="form-input" placeholder="Ej: Concierto Acústico Local" required minlength="3">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <textarea id="ev-desc" class="form-input" rows="3" placeholder="Información del evento, horario, lugar..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Capacidad Total (Cantidad de Boletos)</label>
+        <input type="number" id="ev-capacity" class="form-input" min="1" max="1000" value="100" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Precio por Boleto ($)</label>
+        <input type="number" id="ev-price" class="form-input" min="0" step="0.50" value="10.00" required>
+      </div>
+
+      <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+          <input type="checkbox" id="ev-has-seats">
+          <span>Generar con numeración de asientos (ej. A-01, A-02...)</span>
+        </label>
+      </div>
+
+      <div id="seat-prefix-container" class="form-group" style="display: none;">
+        <label class="form-label">Prefijo de Fila / Asiento</label>
+        <input type="text" id="ev-seat-prefix" class="form-input" value="A" maxlength="5">
+      </div>
+
+      <button type="submit" id="btn-create-event" class="btn btn-primary btn-block">
+        Crear Evento e Inicializar Boletos
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/jsqr.min.js"></script>
+<script src="/static/js/admin.js"></script>
+{% endblock %}

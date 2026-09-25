@@ -1,0 +1,24 @@
+# Python
+venv/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases (re-creatable via scripts/seed_data.py)
+tickets.db
+tickets.db-wal
+tickets.db-shm
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# System & OS
+.DS_Store
+*.log
+/run/ticketing_dnsmasq.pid

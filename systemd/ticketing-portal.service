@@ -1,0 +1,15 @@
+[Unit]
+Description=Autonomous Local Ticketing & Captive Portal Backend
+After=network.target
+
+[Service]
+Type=simple
+User=stalinft
+WorkingDirectory=/home/stalinft/Documentos/venta-wifi
+ExecStart=/home/stalinft/Documentos/venta-wifi/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
